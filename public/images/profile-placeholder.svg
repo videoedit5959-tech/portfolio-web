@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181b"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="avatarGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3f3f46"/>
+      <stop offset="100%" stop-color="#27272a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="240" height="240" rx="32" fill="url(#bgGrad)"/>
+  <rect width="238" height="238" x="1" y="1" rx="31" fill="none" stroke="#27272a" stroke-width="2"/>
+
+  <!-- Code Symbol Accent -->
+  <path d="M40 70 L25 85 L40 100" fill="none" stroke="#3b82f6" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+  <path d="M200 70 L215 85 L200 100" fill="none" stroke="#3b82f6" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+  
+  <!-- Subtle Grid Circles -->
+  <circle cx="120" cy="95" r="54" fill="none" stroke="#27272a" stroke-dasharray="4 4"/>
+
+  <!-- Stylized Avatar Head -->
+  <circle cx="120" cy="95" r="42" fill="url(#avatarGrad)" stroke="#3f3f46" stroke-width="2.5"/>
+
+  <!-- Stylized Avatar Body/Shoulders -->
+  <path d="M48 206 C48 160 80 152 120 152 C160 152 192 160 192 206 Z" fill="url(#avatarGrad)" stroke="#3f3f46" stroke-width="2.5"/>
+
+  <!-- MERN Indicator Badge -->
+  <g transform="translate(74, 186)">
+    <rect width="92" height="26" rx="13" fill="#1e1e24" stroke="#3b82f6" stroke-width="1.5"/>
+    <text x="46" y="17" fill="#60a5fa" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10.5" font-weight="700" text-anchor="middle" letter-spacing="1">MERN DEV</text>
+  </g>
+</svg>

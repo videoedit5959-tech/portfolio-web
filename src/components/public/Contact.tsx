@@ -53,10 +53,7 @@ export const Contact: React.FC<ContactProps> = ({ profile }) => {
     setIsSubmitting(true);
 
     try {
-      // Small simulated delay for UX
-      await new Promise((res) => setTimeout(res, 500));
-
-      const result = StorageService.submitMessage({
+      const result = await StorageService.submitMessage({
         name: formData.name.trim(),
         email: formData.email.trim(),
         subject: formData.subject.trim(),

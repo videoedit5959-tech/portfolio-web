@@ -1,75 +1,49 @@
-import express, { Request, Response } from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import express from 'express';
 import dotenv from 'dotenv';
-import authRoutes from './routes/authRoutes';
-import portfolioRoutes from './routes/portfolioRoutes';
-import contactRoutes from './routes/contactRoutes';
-import adminRoutes from './routes/adminRoutes';
-import { errorHandler } from './middleware/errorHandler';
-import { connectDB } from './config/db';
+import { createServer as createViteServer } from 'vite';
+import { createApp } from '../backend/src/app';
+import { connectDB } from '../backend/src/config/db';
+import { initCloudinary } from '../backend/src/config/cloudinary';
+import { seedInitialDatabase } from '../backend/src/services/adminSeed';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const PORT = 3000;
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+async function startServer() {
+  // 1. Initialize Cloudinary SDK configuration
+  initCloudinary();
 
-// Security & Parsing Middlewares
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  // 2. Connect to real MongoDB
+  await connectDB();
 
-// CORS setup
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-    return;
+  // 3. Seed real initial admin and truthful verified portfolio data
+  await seedInitialDatabase();
+
+  // 4. Create fully configured Express Application with real API endpoints
+  const app = createApp();
+
+  // 5. Frontend serving: Vite dev middleware in development or dist/ in production
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
   }
-  next();
-});
 
-// Connect to MongoDB
-connectDB();
-
-// API Endpoints
-app.use('/api/auth', authRoutes);
-app.use('/api/portfolio', portfolioRoutes);
-app.use('/api/contact', contactRoutes);
-app.use('/api/admin', adminRoutes);
-
-// Health Check Endpoint
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'Asif MERN Portfolio API',
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Production MERN Server running on http://0.0.0.0:${PORT}`);
   });
+}
+
+startServer().catch((err) => {
+  console.error('Server startup failed:', err);
 });
-
-// Production Static Assets Serve
-const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
-
-// Fallback to index.html for Single-Page Application (SPA) routing
-app.get('*', (req: Request, res: Response) => {
-  const indexPath = path.join(distPath, 'index.html');
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      res.status(200).send('Portfolio API Server is running.');
-    }
-  });
-});
-
-// Error handling middleware
-app.use(errorHandler);
-
-app.listen(PORT, () => {
-  console.log(`🚀 Asif MERN Portfolio Server active on port ${PORT}`);
-});
-
-export default app;

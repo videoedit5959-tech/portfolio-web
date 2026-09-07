@@ -104,7 +104,7 @@ export const AdminProjectsTab: React.FC<AdminProjectsTabProps> = ({
       gallery: parsedGallery.length > 0 ? parsedGallery : [formData.thumbnail || ''],
       technologies: parsedTechs.length > 0 ? parsedTechs : ['React', 'Node.js'],
       features: parsedFeatures.length > 0 ? parsedFeatures : ['Core feature 1'],
-      githubUrl: formData.githubUrl || 'https://github.com',
+      githubUrl: formData.githubUrl || '',
       liveUrl: formData.liveUrl || '',
       featured: formData.featured !== undefined ? formData.featured : true,
       displayOrder: formData.displayOrder || 1,

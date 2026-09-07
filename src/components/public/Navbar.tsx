@@ -7,7 +7,7 @@ interface NavbarProps {
   profile: ProfileData;
   onOpenResume: () => void;
   onNavigateAdmin: () => void;
-  onNavigateHome: () => void;
+  onNavigateHome?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -40,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
     setMobileMenuOpen(false);
-    onNavigateHome();
+    onNavigateHome?.();
     const targetElement = document.querySelector(href);
     if (targetElement) {
       targetElement.scrollIntoView({ behavior: 'smooth' });
@@ -62,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           href="#"
           onClick={(e) => {
             e.preventDefault();
-            onNavigateHome();
+            onNavigateHome?.();
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           className="flex items-center gap-2.5 group cursor-pointer"

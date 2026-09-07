@@ -44,90 +44,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateHome }
   const [messages, setMessages] = useState<ContactMessageData[]>(StorageService.getMessages());
   const [settings, setSettings] = useState<SiteSettingsData>(StorageService.getSettings());
 
+  const syncStateFromStorage = () => {
+    setProfile(StorageService.getProfile());
+    setProjects(StorageService.getProjects());
+    setSkills(StorageService.getSkills());
+    setServices(StorageService.getServices());
+    setExperience(StorageService.getExperience());
+    setTestimonials(StorageService.getTestimonials());
+    setMessages(StorageService.getMessages());
+    setSettings(StorageService.getSettings());
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      await StorageService.initializeFromDatabase();
+      await StorageService.fetchMessages();
+      syncStateFromStorage();
+    };
+    loadData();
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleSaveProfile = (updated: ProfileData) => {
-    const res = StorageService.updateProfile(updated);
+  const handleSaveProfile = async (updated: ProfileData) => {
+    const res = await StorageService.updateProfile(updated);
     setProfile(res);
     showToast('Profile details updated successfully.');
   };
 
-  const handleSaveProject = (project: ProjectData) => {
-    const res = StorageService.saveProject(project);
+  const handleSaveProject = async (project: ProjectData) => {
+    const res = await StorageService.saveProject(project);
     setProjects(res);
     showToast('Project saved successfully.');
   };
 
-  const handleDeleteProject = (id: string) => {
-    const res = StorageService.deleteProject(id);
+  const handleDeleteProject = async (id: string) => {
+    const res = await StorageService.deleteProject(id);
     setProjects(res);
     showToast('Project removed successfully.');
   };
 
-  const handleSaveSkill = (skill: SkillData) => {
-    const res = StorageService.saveSkill(skill);
+  const handleSaveSkill = async (skill: SkillData) => {
+    const res = await StorageService.saveSkill(skill);
     setSkills(res);
     showToast('Skill updated successfully.');
   };
 
-  const handleDeleteSkill = (id: string) => {
-    const res = StorageService.deleteSkill(id);
+  const handleDeleteSkill = async (id: string) => {
+    const res = await StorageService.deleteSkill(id);
     setSkills(res);
     showToast('Skill removed successfully.');
   };
 
-  const handleSaveService = (service: ServiceData) => {
-    const res = StorageService.saveService(service);
+  const handleSaveService = async (service: ServiceData) => {
+    const res = await StorageService.saveService(service);
     setServices(res);
     showToast('Service updated successfully.');
   };
 
-  const handleDeleteService = (id: string) => {
-    const res = StorageService.deleteService(id);
+  const handleDeleteService = async (id: string) => {
+    const res = await StorageService.deleteService(id);
     setServices(res);
     showToast('Service removed successfully.');
   };
 
-  const handleSaveExperience = (item: ExperienceData) => {
-    const res = StorageService.saveExperience(item);
+  const handleSaveExperience = async (item: ExperienceData) => {
+    const res = await StorageService.saveExperience(item);
     setExperience(res);
     showToast('Milestone saved successfully.');
   };
 
-  const handleDeleteExperience = (id: string) => {
-    const res = StorageService.deleteExperience(id);
+  const handleDeleteExperience = async (id: string) => {
+    const res = await StorageService.deleteExperience(id);
     setExperience(res);
     showToast('Milestone removed successfully.');
   };
 
-  const handleSaveTestimonial = (item: TestimonialData) => {
-    const res = StorageService.saveTestimonial(item);
+  const handleSaveTestimonial = async (item: TestimonialData) => {
+    const res = await StorageService.saveTestimonial(item);
     setTestimonials(res);
     showToast('Testimonial saved successfully.');
   };
 
-  const handleDeleteTestimonial = (id: string) => {
-    const res = StorageService.deleteTestimonial(id);
+  const handleDeleteTestimonial = async (id: string) => {
+    const res = await StorageService.deleteTestimonial(id);
     setTestimonials(res);
     showToast('Testimonial removed successfully.');
   };
 
-  const handleMarkMessageRead = (id: string) => {
-    const res = StorageService.markMessageRead(id);
-    setMessages(res);
+  const handleMarkMessageRead = async (id: string) => {
+    const res = await StorageService.markMessageRead(id);
+    setMessages([...res]);
   };
 
-  const handleDeleteMessage = (id: string) => {
-    const res = StorageService.deleteMessage(id);
-    setMessages(res);
+  const handleDeleteMessage = async (id: string) => {
+    const res = await StorageService.deleteMessage(id);
+    setMessages([...res]);
     showToast('Message deleted.');
   };
 
-  const handleSaveSettings = (updated: SiteSettingsData) => {
-    const res = StorageService.updateSettings(updated);
+  const handleSaveSettings = async (updated: SiteSettingsData) => {
+    const res = await StorageService.updateSettings(updated);
     setSettings(res);
     showToast('Site settings updated.');
   };

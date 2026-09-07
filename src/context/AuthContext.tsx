@@ -6,96 +6,112 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   token: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = 'asif_portfolio_auth_token';
-const AUTH_USER_KEY = 'asif_portfolio_auth_user';
+const AUTH_STORAGE_KEY = 'asif_portfolio_jwt';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Validate session on mount with real /api/auth/me
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem(AUTH_STORAGE_KEY);
-      const storedUser = localStorage.getItem(AUTH_USER_KEY);
-      if (storedToken && storedUser) {
-        // Validate token expiry (simulated 24-hour token)
-        const parsedToken = JSON.parse(storedToken);
-        if (parsedToken.exp && Date.now() < parsedToken.exp) {
-          setToken(parsedToken.jwt);
-          setUser(JSON.parse(storedUser));
+    const verifySession = async () => {
+      try {
+        const storedToken = localStorage.getItem(AUTH_STORAGE_KEY);
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+          ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
+        };
+
+        const res = await fetch('/api/auth/me', {
+          headers,
+          credentials: 'include',
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            setUser(data.user);
+            setToken(storedToken);
+          } else {
+            setUser(null);
+            setToken(null);
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+          }
         } else {
-          // Expired
+          setUser(null);
+          setToken(null);
           localStorage.removeItem(AUTH_STORAGE_KEY);
-          localStorage.removeItem(AUTH_USER_KEY);
         }
+      } catch (e) {
+        console.warn('Session verification offline or server unreachable:', e);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (e) {
-      console.error('Failed to restore auth session', e);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    verifySession();
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
-    // Simulate network authentication request
-    await new Promise((resolve) => setTimeout(resolve, 600));
 
-    const cleanEmail = email.trim().toLowerCase();
-    
-    // Check credentials against standard default or custom stored admin
-    // Default admin: admin@asifdev.com / asif2026! or admin12345
-    const validEmails = ['admin@asifdev.com', 'asif@gmail.com', 'admin@example.com'];
-    const validPasswords = ['admin12345', 'asif2026!', 'mern@asif2026'];
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
 
-    const isValidUser = validEmails.includes(cleanEmail) || cleanEmail.includes('admin') || cleanEmail.includes('asif');
-    const isValidPass = validPasswords.includes(password) || password === 'admin123' || password === 'admin12345';
+      const data = await res.json();
 
-    if (isValidUser && isValidPass) {
-      const adminUser: AdminUser = {
-        id: 'admin-1',
-        email: cleanEmail,
-        name: 'Asif (Administrator)',
-        role: 'admin',
-      };
+      if (!res.ok || !data.success) {
+        setIsLoading(false);
+        return {
+          success: false,
+          error: data.error || 'Invalid credentials. Please verify your email and password.',
+        };
+      }
 
-      // Create simulated JWT with signature and expiration
-      const simulatedJwt = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${btoa(
-        JSON.stringify({ sub: adminUser.id, email: adminUser.email, role: 'admin', iat: Date.now() })
-      )}.simulated_hmac_sha256_signature`;
+      setUser(data.user);
+      setToken(data.token);
+      if (data.token) {
+        localStorage.setItem(AUTH_STORAGE_KEY, data.token);
+      }
 
-      const tokenObj = {
-        jwt: simulatedJwt,
-        exp: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-      };
-
-      setUser(adminUser);
-      setToken(simulatedJwt);
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(tokenObj));
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(adminUser));
       setIsLoading(false);
       return { success: true };
+    } catch (err) {
+      setIsLoading(false);
+      return {
+        success: false,
+        error: 'Unable to reach authentication server. Please check your network connection.',
+      };
     }
-
-    setIsLoading(false);
-    return {
-      success: false,
-      error: 'Invalid email or password. Please check your credentials.',
-    };
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    localStorage.removeItem(AUTH_USER_KEY);
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.warn('Logout network error:', e);
+    } finally {
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
   };
 
   return (

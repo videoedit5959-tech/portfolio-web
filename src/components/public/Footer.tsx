@@ -5,7 +5,7 @@ import { Lock, Github, Linkedin, MessageSquare, ArrowUp, ArrowUpRight } from 'lu
 interface FooterProps {
   profile: ProfileData;
   onNavigateAdmin: () => void;
-  onNavigateHome: () => void;
+  onNavigateHome?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({

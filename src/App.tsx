@@ -54,9 +54,10 @@ export default function App() {
   const [testimonials, setTestimonials] = useState<TestimonialData[]>(StorageService.getTestimonials());
   const [settings, setSettings] = useState<SiteSettingsData>(StorageService.getSettings());
 
-  // Reload data whenever switching back to public view from admin
+  // Initialize data from database on mount and reload on viewMode change
   useEffect(() => {
-    if (viewMode === 'public') {
+    const initData = async () => {
+      await StorageService.initializeFromDatabase();
       setProfile(StorageService.getProfile());
       setProjects(StorageService.getProjects());
       setSkills(StorageService.getSkills());
@@ -64,7 +65,8 @@ export default function App() {
       setExperience(StorageService.getExperience());
       setTestimonials(StorageService.getTestimonials());
       setSettings(StorageService.getSettings());
-    }
+    };
+    initData();
   }, [viewMode]);
 
   // Sync document title and meta description with settings
@@ -122,6 +124,7 @@ export default function App() {
         profile={profile}
         onOpenResume={() => setIsResumeModalOpen(true)}
         onNavigateAdmin={navigateToAdmin}
+        onNavigateHome={navigateToHome}
       />
 
       <main>
@@ -142,7 +145,13 @@ export default function App() {
         <Skills skills={skills} />
 
         {/* Services Section */}
-        <Services services={services} />
+        <Services
+          services={services}
+          onContactClick={() => {
+            const el = document.getElementById('contact');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
 
         {/* Featured Personal Projects */}
         <FeaturedProjects

@@ -5,11 +5,20 @@ import { Check } from 'lucide-react';
 
 interface ServicesProps {
   services: ServiceData[];
-  onContactClick: () => void;
+  onContactClick?: () => void;
 }
 
 export const Services: React.FC<ServicesProps> = ({ services, onContactClick }) => {
   const activeServices = services.filter((s) => s.isActive);
+
+  const handleContact = () => {
+    if (onContactClick) {
+      onContactClick();
+    } else {
+      const el = document.getElementById('contact');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   return (
     <section
@@ -78,7 +87,7 @@ export const Services: React.FC<ServicesProps> = ({ services, onContactClick }) 
             </p>
           </div>
           <button
-            onClick={onContactClick}
+            onClick={handleContact}
             className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shrink-0 cursor-pointer shadow-xs"
           >
             Discuss a Project

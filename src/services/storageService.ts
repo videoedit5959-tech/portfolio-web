@@ -18,244 +18,534 @@ import {
   initialSiteSettings,
 } from '../data/defaultData';
 
-const KEYS = {
-  PROFILE: 'asif_portfolio_profile',
-  PROJECTS: 'asif_portfolio_projects',
-  SKILLS: 'asif_portfolio_skills',
-  SERVICES: 'asif_portfolio_services',
-  EXPERIENCE: 'asif_portfolio_experience',
-  TESTIMONIALS: 'asif_portfolio_testimonials',
-  MESSAGES: 'asif_portfolio_messages',
-  SETTINGS: 'asif_portfolio_settings',
-  LAST_CONTACT_TIMESTAMP: 'asif_portfolio_last_contact',
+// In-memory runtime state populated from real MongoDB API
+let liveProfile: ProfileData = initialProfile;
+let liveProjects: ProjectData[] = initialProjects;
+let liveSkills: SkillData[] = initialSkills;
+let liveServices: ServiceData[] = initialServices;
+let liveExperience: ExperienceData[] = initialExperience;
+let liveTestimonials: TestimonialData[] = initialTestimonials;
+let liveSettings: SiteSettingsData = initialSiteSettings;
+let liveMessages: ContactMessageData[] = [];
+
+// Helper to get auth header if token exists
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('asif_portfolio_jwt');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 };
 
-// Safe storage access helper
-function getStoredItem<T>(key: string, fallback: T): T {
-  try {
-    const item = localStorage.getItem(key);
-    if (!item) return fallback;
-    return JSON.parse(item) as T;
-  } catch (error) {
-    console.error(`Error reading ${key} from storage:`, error);
-    return fallback;
-  }
-}
-
-function setStoredItem<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error(`Error saving ${key} to storage:`, error);
-  }
-}
-
 export const StorageService = {
-  // Profile
-  getProfile(): ProfileData {
-    return getStoredItem<ProfileData>(KEYS.PROFILE, initialProfile);
+  // Sync with MongoDB backend
+  async initializeFromDatabase(): Promise<void> {
+    try {
+      const res = await fetch('/api/portfolio');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          if (json.data.profile) {
+            liveProfile = {
+              ...json.data.profile,
+              id: json.data.profile._id || json.data.profile.id,
+            };
+          }
+          if (Array.isArray(json.data.projects) && json.data.projects.length > 0) {
+            liveProjects = json.data.projects.map((p: any) => ({
+              ...p,
+              id: p._id || p.id,
+            }));
+          }
+          if (Array.isArray(json.data.skills) && json.data.skills.length > 0) {
+            liveSkills = json.data.skills.map((s: any) => ({
+              ...s,
+              id: s._id || s.id,
+            }));
+          }
+          if (Array.isArray(json.data.services) && json.data.services.length > 0) {
+            liveServices = json.data.services.map((s: any) => ({
+              ...s,
+              id: s._id || s.id,
+            }));
+          }
+          if (Array.isArray(json.data.experience)) {
+            liveExperience = json.data.experience.map((e: any) => ({
+              ...e,
+              id: e._id || e.id,
+              companyOrContext: e.company || e.companyOrContext,
+              period: e.startDate ? `${e.startDate} - ${e.isCurrent ? 'Present' : e.endDate || ''}` : e.period,
+            }));
+          }
+          if (Array.isArray(json.data.testimonials)) {
+            liveTestimonials = json.data.testimonials.map((t: any) => ({
+              ...t,
+              id: t._id || t.id,
+              companyOrContext: t.company || t.companyOrContext,
+            }));
+          }
+          if (json.data.settings) {
+            liveSettings = {
+              ...json.data.settings,
+              primaryColor: json.data.settings.themeAccent || json.data.settings.primaryColor,
+              ogImageUrl: json.data.settings.ogImage || json.data.settings.ogImageUrl,
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Database offline or unreachable; using initialized dataset:', err);
+    }
   },
-  updateProfile(profile: ProfileData): ProfileData {
-    setStoredItem(KEYS.PROFILE, profile);
+
+  // Profile (MongoDB backed)
+  getProfile(): ProfileData {
+    return liveProfile;
+  },
+  async updateProfile(profile: ProfileData): Promise<ProfileData> {
+    liveProfile = profile;
+    try {
+      await fetch('/api/profile', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(profile),
+      });
+    } catch (e) {
+      console.error('Failed to persist profile to MongoDB:', e);
+    }
     return profile;
   },
 
-  // Projects
+  // Projects (MongoDB backed)
   getProjects(): ProjectData[] {
-    const projects = getStoredItem<ProjectData[]>(KEYS.PROJECTS, initialProjects);
-    return projects.sort((a, b) => a.displayOrder - b.displayOrder);
+    return [...liveProjects].sort((a, b) => a.displayOrder - b.displayOrder);
   },
   getProjectBySlug(slug: string): ProjectData | undefined {
-    const projects = this.getProjects();
-    return projects.find((p) => p.slug === slug);
+    return liveProjects.find((p) => p.slug === slug);
   },
-  saveProject(project: ProjectData): ProjectData[] {
-    const projects = this.getProjects();
-    const index = projects.findIndex((p) => p.id === project.id);
+  async saveProject(project: ProjectData): Promise<ProjectData[]> {
+    const index = liveProjects.findIndex((p) => p.id === project.id || (p as any)._id === project.id);
     if (index >= 0) {
-      projects[index] = project;
+      liveProjects[index] = project;
+      try {
+        const id = (project as any)._id || project.id;
+        await fetch(`/api/projects/${id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(project),
+        });
+      } catch (e) {
+        console.error('Failed to update project in MongoDB:', e);
+      }
     } else {
-      projects.push(project);
+      liveProjects.push(project);
+      try {
+        const res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(project),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          if (created.data?._id) {
+            project.id = created.data._id;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create project in MongoDB:', e);
+      }
     }
-    setStoredItem(KEYS.PROJECTS, projects);
     return this.getProjects();
   },
-  deleteProject(id: string): ProjectData[] {
-    const projects = this.getProjects();
-    const filtered = projects.filter((p) => p.id !== id);
-    setStoredItem(KEYS.PROJECTS, filtered);
-    return filtered;
+  async deleteProject(id: string): Promise<ProjectData[]> {
+    liveProjects = liveProjects.filter((p) => p.id !== id && (p as any)._id !== id);
+    try {
+      await fetch(`/api/projects/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Failed to delete project from MongoDB:', e);
+    }
+    return liveProjects;
   },
 
-  // Skills
+  // Skills (MongoDB backed)
   getSkills(): SkillData[] {
-    const skills = getStoredItem<SkillData[]>(KEYS.SKILLS, initialSkills);
-    return skills.sort((a, b) => a.displayOrder - b.displayOrder);
+    return [...liveSkills].sort((a, b) => a.displayOrder - b.displayOrder);
   },
-  saveSkill(skill: SkillData): SkillData[] {
-    const skills = this.getSkills();
-    const index = skills.findIndex((s) => s.id === skill.id);
+  async saveSkill(skill: SkillData): Promise<SkillData[]> {
+    const index = liveSkills.findIndex((s) => s.id === skill.id || (s as any)._id === skill.id);
     if (index >= 0) {
-      skills[index] = skill;
+      liveSkills[index] = skill;
+      try {
+        const id = (skill as any)._id || skill.id;
+        await fetch(`/api/skills/${id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(skill),
+        });
+      } catch (e) {
+        console.error('Failed to update skill in MongoDB:', e);
+      }
     } else {
-      skills.push(skill);
+      liveSkills.push(skill);
+      try {
+        const res = await fetch('/api/skills', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(skill),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          if (created.data?._id) {
+            skill.id = created.data._id;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create skill in MongoDB:', e);
+      }
     }
-    setStoredItem(KEYS.SKILLS, skills);
     return this.getSkills();
   },
-  deleteSkill(id: string): SkillData[] {
-    const skills = this.getSkills();
-    const filtered = skills.filter((s) => s.id !== id);
-    setStoredItem(KEYS.SKILLS, filtered);
-    return filtered;
+  async deleteSkill(id: string): Promise<SkillData[]> {
+    liveSkills = liveSkills.filter((s) => s.id !== id && (s as any)._id !== id);
+    try {
+      await fetch(`/api/skills/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Failed to delete skill from MongoDB:', e);
+    }
+    return liveSkills;
   },
 
-  // Services
+  // Services (MongoDB backed)
   getServices(): ServiceData[] {
-    const services = getStoredItem<ServiceData[]>(KEYS.SERVICES, initialServices);
-    return services.sort((a, b) => a.displayOrder - b.displayOrder);
+    return [...liveServices].sort((a, b) => a.displayOrder - b.displayOrder);
   },
-  saveService(service: ServiceData): ServiceData[] {
-    const services = this.getServices();
-    const index = services.findIndex((s) => s.id === service.id);
+  async saveService(service: ServiceData): Promise<ServiceData[]> {
+    const index = liveServices.findIndex((s) => s.id === service.id || (s as any)._id === service.id);
     if (index >= 0) {
-      services[index] = service;
+      liveServices[index] = service;
+      try {
+        const id = (service as any)._id || service.id;
+        await fetch(`/api/services/${id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(service),
+        });
+      } catch (e) {
+        console.error('Failed to update service in MongoDB:', e);
+      }
     } else {
-      services.push(service);
+      liveServices.push(service);
+      try {
+        const res = await fetch('/api/services', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(service),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          if (created.data?._id) {
+            service.id = created.data._id;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create service in MongoDB:', e);
+      }
     }
-    setStoredItem(KEYS.SERVICES, services);
     return this.getServices();
   },
-  deleteService(id: string): ServiceData[] {
-    const services = this.getServices();
-    const filtered = services.filter((s) => s.id !== id);
-    setStoredItem(KEYS.SERVICES, filtered);
-    return filtered;
+  async deleteService(id: string): Promise<ServiceData[]> {
+    liveServices = liveServices.filter((s) => s.id !== id && (s as any)._id !== id);
+    try {
+      await fetch(`/api/services/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Failed to delete service from MongoDB:', e);
+    }
+    return liveServices;
   },
 
-  // Experience
+  // Experience (MongoDB backed)
   getExperience(): ExperienceData[] {
-    const exp = getStoredItem<ExperienceData[]>(KEYS.EXPERIENCE, initialExperience);
-    return exp.sort((a, b) => a.displayOrder - b.displayOrder);
+    return [...liveExperience].sort((a, b) => a.displayOrder - b.displayOrder);
   },
-  saveExperience(item: ExperienceData): ExperienceData[] {
-    const list = this.getExperience();
-    const index = list.findIndex((e) => e.id === item.id);
+  async saveExperience(item: ExperienceData): Promise<ExperienceData[]> {
+    const index = liveExperience.findIndex((e) => e.id === item.id || (e as any)._id === item.id);
+    const payload = {
+      company: item.companyOrContext,
+      position: item.position,
+      startDate: item.period || '2024',
+      isCurrent: item.isCurrent,
+      description: item.description,
+      technologies: item.technologies,
+      displayOrder: item.displayOrder,
+      type: item.type,
+    };
+
     if (index >= 0) {
-      list[index] = item;
+      liveExperience[index] = item;
+      try {
+        const id = (item as any)._id || item.id;
+        await fetch(`/api/experience/${id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {
+        console.error('Failed to update experience in MongoDB:', e);
+      }
     } else {
-      list.push(item);
+      liveExperience.push(item);
+      try {
+        const res = await fetch('/api/experience', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          if (created.data?._id) {
+            item.id = created.data._id;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create experience in MongoDB:', e);
+      }
     }
-    setStoredItem(KEYS.EXPERIENCE, list);
     return this.getExperience();
   },
-  deleteExperience(id: string): ExperienceData[] {
-    const list = this.getExperience();
-    const filtered = list.filter((e) => e.id !== id);
-    setStoredItem(KEYS.EXPERIENCE, filtered);
-    return filtered;
+  async deleteExperience(id: string): Promise<ExperienceData[]> {
+    liveExperience = liveExperience.filter((e) => e.id !== id && (e as any)._id !== id);
+    try {
+      await fetch(`/api/experience/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Failed to delete experience from MongoDB:', e);
+    }
+    return liveExperience;
   },
 
-  // Testimonials
+  // Testimonials (MongoDB backed)
   getTestimonials(): TestimonialData[] {
-    const list = getStoredItem<TestimonialData[]>(KEYS.TESTIMONIALS, initialTestimonials);
-    return list.sort((a, b) => a.displayOrder - b.displayOrder);
+    return [...liveTestimonials].sort((a, b) => a.displayOrder - b.displayOrder);
   },
-  saveTestimonial(item: TestimonialData): TestimonialData[] {
-    const list = this.getTestimonials();
-    const index = list.findIndex((t) => t.id === item.id);
+  async saveTestimonial(item: TestimonialData): Promise<TestimonialData[]> {
+    const index = liveTestimonials.findIndex((t) => t.id === item.id || (t as any)._id === item.id);
+    const payload = {
+      name: item.name,
+      position: item.position,
+      company: item.companyOrContext,
+      avatarUrl: item.avatarUrl,
+      content: item.content,
+      rating: 5,
+      isActive: item.isActive,
+    };
+
     if (index >= 0) {
-      list[index] = item;
+      liveTestimonials[index] = item;
+      try {
+        const id = (item as any)._id || item.id;
+        await fetch(`/api/testimonials/${id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {
+        console.error('Failed to update testimonial in MongoDB:', e);
+      }
     } else {
-      list.push(item);
+      liveTestimonials.push(item);
+      try {
+        const res = await fetch('/api/testimonials', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          if (created.data?._id) {
+            item.id = created.data._id;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to create testimonial in MongoDB:', e);
+      }
     }
-    setStoredItem(KEYS.TESTIMONIALS, list);
     return this.getTestimonials();
   },
-  deleteTestimonial(id: string): TestimonialData[] {
-    const list = this.getTestimonials();
-    const filtered = list.filter((t) => t.id !== id);
-    setStoredItem(KEYS.TESTIMONIALS, filtered);
-    return filtered;
+  async deleteTestimonial(id: string): Promise<TestimonialData[]> {
+    liveTestimonials = liveTestimonials.filter((t) => t.id !== id && (t as any)._id !== id);
+    try {
+      await fetch(`/api/testimonials/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Failed to delete testimonial from MongoDB:', e);
+    }
+    return liveTestimonials;
   },
 
   // Messages (Contact)
+  async fetchMessages(): Promise<ContactMessageData[]> {
+    try {
+      const res = await fetch('/api/contact', {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+          liveMessages = data.data.map((m: any) => ({
+            id: m._id || m.id,
+            name: m.name,
+            email: m.email,
+            subject: m.subject,
+            message: m.message,
+            createdAt: m.createdAt,
+            isRead: m.isRead,
+            status: m.isRead ? 'read' : 'new',
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch messages from MongoDB:', err);
+    }
+    return liveMessages;
+  },
   getMessages(): ContactMessageData[] {
-    const initialMsgs: ContactMessageData[] = [
-      {
-        id: 'msg-sample-1',
-        name: 'Technical Recruiter',
-        email: 'recruiter@techinnovations.io',
-        subject: 'MERN Stack Developer Role Inquiry',
-        message: 'Hello Asif, I reviewed your Featured Personal Projects, especially the Project Management SaaS and E-Commerce platform. Impressive code structure! Are you available for a remote full-stack role?',
-        createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-        isRead: false,
-        status: 'new',
-      },
-    ];
-    return getStoredItem<ContactMessageData[]>(KEYS.MESSAGES, initialMsgs);
+    return liveMessages;
   },
-  submitMessage(message: Omit<ContactMessageData, 'id' | 'createdAt' | 'isRead' | 'status'>): { success: boolean; error?: string } {
-    const lastTimestamp = parseInt(localStorage.getItem(KEYS.LAST_CONTACT_TIMESTAMP) || '0', 10);
-    const now = Date.now();
-    if (now - lastTimestamp < 20000) {
-      const waitSec = Math.ceil((20000 - (now - lastTimestamp)) / 1000);
-      return { success: false, error: `Please wait ${waitSec}s before sending another message to prevent spam.` };
-    }
+  async submitMessage(message: {
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message),
+      });
 
-    const messages = this.getMessages();
-    const newMessage: ContactMessageData = {
-      ...message,
-      id: `msg-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      isRead: false,
-      status: 'new',
-    };
-    messages.unshift(newMessage);
-    setStoredItem(KEYS.MESSAGES, messages);
-    localStorage.setItem(KEYS.LAST_CONTACT_TIMESTAMP, now.toString());
-    return { success: true };
-  },
-  markMessageRead(id: string, isRead: boolean = true): ContactMessageData[] {
-    const messages = this.getMessages();
-    const index = messages.findIndex((m) => m.id === id);
-    if (index !== -1) {
-      messages[index].isRead = isRead;
-      messages[index].status = isRead ? 'read' : 'new';
-      setStoredItem(KEYS.MESSAGES, messages);
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to send message.' };
+      }
+
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Network communication error.',
+      };
     }
-    return this.getMessages();
   },
-  deleteMessage(id: string): ContactMessageData[] {
-    const messages = this.getMessages();
-    const filtered = messages.filter((m) => m.id !== id);
-    setStoredItem(KEYS.MESSAGES, filtered);
-    return filtered;
+  async markMessageRead(id: string, isRead: boolean = true): Promise<ContactMessageData[]> {
+    try {
+      await fetch(`/api/contact/${id}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ isRead }),
+      });
+    } catch (e) {
+      console.error('Failed to mark message read in MongoDB:', e);
+    }
+    const idx = liveMessages.findIndex((m) => m.id === id);
+    if (idx !== -1) {
+      liveMessages[idx].isRead = isRead;
+      liveMessages[idx].status = isRead ? 'read' : 'new';
+    }
+    return liveMessages;
+  },
+  async deleteMessage(id: string): Promise<ContactMessageData[]> {
+    try {
+      await fetch(`/api/contact/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Failed to delete message from MongoDB:', e);
+    }
+    liveMessages = liveMessages.filter((m) => m.id !== id);
+    return liveMessages;
   },
 
   // Site Settings
   getSiteSettings(): SiteSettingsData {
-    return getStoredItem<SiteSettingsData>(KEYS.SETTINGS, initialSiteSettings);
+    return liveSettings;
   },
   getSettings(): SiteSettingsData {
     return this.getSiteSettings();
   },
-  updateSiteSettings(settings: SiteSettingsData): SiteSettingsData {
-    setStoredItem(KEYS.SETTINGS, settings);
+  async updateSiteSettings(settings: SiteSettingsData): Promise<SiteSettingsData> {
+    liveSettings = settings;
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          siteTitle: settings.siteTitle,
+          metaDescription: settings.metaDescription,
+          keywords: settings.keywords,
+          ogImage: settings.ogImageUrl,
+          themeAccent: settings.primaryColor,
+          footerText: settings.footerText,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to update site settings in MongoDB:', e);
+    }
     return settings;
   },
-  updateSettings(settings: SiteSettingsData): SiteSettingsData {
+  async updateSettings(settings: SiteSettingsData): Promise<SiteSettingsData> {
     return this.updateSiteSettings(settings);
   },
 
-  // Reset to factory defaults
+  // Reset to initial state
   resetToDefaults(): void {
-    setStoredItem(KEYS.PROFILE, initialProfile);
-    setStoredItem(KEYS.PROJECTS, initialProjects);
-    setStoredItem(KEYS.SKILLS, initialSkills);
-    setStoredItem(KEYS.SERVICES, initialServices);
-    setStoredItem(KEYS.EXPERIENCE, initialExperience);
-    setStoredItem(KEYS.TESTIMONIALS, initialTestimonials);
-    setStoredItem(KEYS.SETTINGS, initialSiteSettings);
+    liveProfile = initialProfile;
+    liveProjects = initialProjects;
+    liveSkills = initialSkills;
+    liveServices = initialServices;
+    liveExperience = initialExperience;
+    liveTestimonials = initialTestimonials;
+    liveSettings = initialSiteSettings;
   },
 };
+
+// Initialize from backend on load
+if (typeof window !== 'undefined') {
+  StorageService.initializeFromDatabase().catch((e) =>
+    console.warn('Initial storage bootstrap caught error:', e)
+  );
+}
